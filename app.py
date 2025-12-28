@@ -86,3 +86,109 @@ def callback():
         f"{PUBLIC_BASE_URL}/connected",
         code=302,
     )
+
+
+
+@app.get("/connected")
+def connected():
+    """
+    Success page after OAuth.
+    Shows user their mailbox is connected and gives them a link to the interface.
+    """
+    # TODO: In production, you'd:
+    # 1. Get the user's email from a session/cookie
+    # 2. Generate a secure link to their Airtable Interface
+    
+    html = """
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>Connected!</title>
+        <style>
+            body {
+                font-family: system-ui, -apple-system, sans-serif;
+                max-width: 600px;
+                margin: 100px auto;
+                padding: 20px;
+                text-align: center;
+            }
+            .success {
+                background: #d4edda;
+                border: 1px solid #c3e6cb;
+                border-radius: 8px;
+                padding: 20px;
+                margin: 20px 0;
+            }
+            .button {
+                display: inline-block;
+                background: #0066cc;
+                color: white;
+                padding: 12px 24px;
+                border-radius: 6px;
+                text-decoration: none;
+                margin-top: 20px;
+            }
+        </style>
+    </head>
+    <body>
+        <h1>✅ Connected Successfully!</h1>
+        <div class="success">
+            <p>Your mailbox is now connected and syncing.</p>
+            <p>We're fetching your emails in the background.</p>
+        </div>
+        <a href="/dashboard" class="button">View My Emails →</a>
+    </body>
+    </html>
+    """
+    return html
+
+
+@app.get("/dashboard")
+def dashboard():
+    """
+    Show the user their personalized Airtable Interface.
+    In production, you'd:
+    1. Check if user is logged in
+    2. Get their email from session
+    3. Embed their specific Airtable Interface
+    """
+    
+    # For now, hardcoded to your email for testing
+    user_email = "gilad.kahala@gmail.com"  # TODO: Get from session/auth
+    
+    # Your Airtable Interface URL (you'll get this after Step 3)
+    airtable_interface_url = "https://airtable.com/embed/YOUR_INTERFACE_ID"
+    
+    html = f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>Email Dashboard</title>
+        <style>
+            body {{
+                margin: 0;
+                padding: 0;
+                font-family: system-ui, -apple-system, sans-serif;
+            }}
+            .header {{
+                background: #f5f5f5;
+                padding: 16px 24px;
+                border-bottom: 1px solid #ddd;
+            }}
+            iframe {{
+                width: 100%;
+                height: calc(100vh - 60px);
+                border: none;
+            }}
+        </style>
+    </head>
+    <body>
+        <div class="header">
+            <h2>📧 Email Dashboard</h2>
+            <p>Logged in as: {user_email}</p>
+        </div>
+        <iframe src="{airtable_interface_url}"></iframe>
+    </body>
+    </html>
+    """
+    return html
