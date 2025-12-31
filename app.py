@@ -13,7 +13,12 @@ app.secret_key = os.environ.get('SECRET_KEY', 'dev-secret-key-change-in-producti
 
 SUPABASE_URL = os.environ.get('SUPABASE_URL')
 SUPABASE_ANON_KEY = os.environ.get('SUPABASE_ANON_KEY')
-RETOOL_APP_URL = '01b04738-e641-11f0-a6ae-83794e0b371b/UntitledEmail%20Analytics%20Dashboard/page1'
+
+# Correct Retool URL
+RETOOL_APP_URL = os.environ.get(
+    'RETOOL_APP_URL',
+    'https://giladkahala.retool.com/apps/UntitledEmail%20Analytics%20Dashboard'
+)
 
 # Token expiration time in hours
 MAGIC_LINK_EXPIRY_HOURS = 24
