@@ -19,7 +19,6 @@ supabase = create_client(SUPABASE_URL, SUPABASE_ANON_KEY)
 
 # Retool Configuration - Direct Retool URL
 RETOOL_APP_URL = 'https://giladkahala.retool.com/apps/01b04738-e641-11f0-a6ae-83794e0b'
-
 # HTML Templates
 LOGIN_TEMPLATE = '''<!DOCTYPE html>
 <html lang="en">
