@@ -18,7 +18,7 @@ if not SUPABASE_URL or not SUPABASE_ANON_KEY:
 supabase = create_client(SUPABASE_URL, SUPABASE_ANON_KEY)
 
 # Retool Configuration - Direct Retool URL
-RETOOL_APP_URL = 'https://giladkahala.retool.com/apps/01b04738-e641-11f0-a6ae-83794e0b'
+RETOOL_APP_URL = '01b04738-e641-11f0-a6ae-83794e0b371b/UntitledEmail%20Analytics%20Dashboard/page1'
 # HTML Templates
 LOGIN_TEMPLATE = '''<!DOCTYPE html>
 <html lang="en">
