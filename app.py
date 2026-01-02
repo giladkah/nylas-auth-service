@@ -14,10 +14,10 @@ app.secret_key = os.environ.get('SECRET_KEY', 'dev-secret-key-change-in-producti
 SUPABASE_URL = os.environ.get('SUPABASE_URL')
 SUPABASE_ANON_KEY = os.environ.get('SUPABASE_ANON_KEY')
 
-# Correct Retool URL
-RETOOL_APP_URL = os.environ.get(
-    'RETOOL_APP_URL',
-    'https://giladkahala.retool.com/apps/UntitledEmail%20Analytics%20Dashboard'
+# Retool embed URL
+RETOOL_EMBED_URL = os.environ.get(
+    'RETOOL_EMBED_URL',
+    'https://giladkahala.retool.com/apps/Analytics%20Dashboard'
 )
 
 # Token expiration time in hours
@@ -36,7 +36,7 @@ validate_environment()
 supabase = create_client(SUPABASE_URL, SUPABASE_ANON_KEY)
 
 # ============================================================================
-# HTML Templates (consider moving to separate files for production)
+# HTML Templates
 # ============================================================================
 
 LOGIN_TEMPLATE = '''<!DOCTYPE html>
@@ -111,6 +111,84 @@ LOGIN_TEMPLATE = '''<!DOCTYPE html>
 </body>
 </html>'''
 
+DASHBOARD_TEMPLATE = '''<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Email Analytics Dashboard</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            background: #f5f5f5;
+        }
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 15px 30px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        }
+        .header h1 {
+            font-size: 20px;
+            font-weight: 600;
+        }
+        .user-info {
+            display: flex;
+            align-items: center;
+            gap: 20px;
+        }
+        .user-email {
+            font-size: 14px;
+            opacity: 0.9;
+        }
+        .logout-btn {
+            background: rgba(255, 255, 255, 0.2);
+            color: white;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            padding: 8px 16px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: all 0.3s ease;
+        }
+        .logout-btn:hover {
+            background: rgba(255, 255, 255, 0.3);
+        }
+        .dashboard-container {
+            flex: 1;
+            display: flex;
+            overflow: hidden;
+        }
+        iframe {
+            width: 100%;
+            height: 100%;
+            border: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>📊 Email Analytics Dashboard</h1>
+        <div class="user-info">
+            <span class="user-email">{{ user_email }}</span>
+            <form method="POST" action="/logout" style="margin: 0;">
+                <button type="submit" class="logout-btn">Logout</button>
+            </form>
+        </div>
+    </div>
+    <div class="dashboard-container">
+        <iframe src="{{ retool_url }}" allow="clipboard-read; clipboard-write"></iframe>
+    </div>
+</body>
+</html>'''
+
 # ============================================================================
 # Helper Functions
 # ============================================================================
@@ -162,7 +240,7 @@ def build_auth_callback_url(token):
 
 def build_retool_dashboard_url(email):
     """Generate Retool dashboard URL with user email parameter."""
-    return f"{RETOOL_APP_URL}?email={email}"
+    return f"{RETOOL_EMBED_URL}?email={email}"
 
 # ============================================================================
 # Routes
@@ -247,14 +325,18 @@ def auth_callback():
 
 @app.route('/dashboard')
 def dashboard():
-    """Redirect authenticated users to Retool dashboard."""
+    """Display embedded Retool dashboard for authenticated users."""
     if not is_user_logged_in():
         return redirect('/')
     
     email = session.get('user_email')
     retool_url = build_retool_dashboard_url(email)
     
-    return redirect(retool_url)
+    return render_template_string(
+        DASHBOARD_TEMPLATE,
+        user_email=email,
+        retool_url=retool_url
+    )
 
 @app.route('/logout', methods=['POST', 'GET'])
 def logout():
