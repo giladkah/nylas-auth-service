@@ -6,41 +6,29 @@ from datetime import datetime, timedelta
 from flask import Flask, request, render_template_string, redirect, session, jsonify
 from supabase import create_client, Client
 
-# ============================================================================
-# Configuration
-# ============================================================================
-
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'dev-secret-key-change-in-production')
 
-# Supabase
 SUPABASE_URL = os.environ.get('SUPABASE_URL')
 SUPABASE_ANON_KEY = os.environ.get('SUPABASE_ANON_KEY')
 
-# Nylas
 NYLAS_API_URI = os.environ.get("NYLAS_API_URI", "https://api.us.nylas.com").rstrip("/")
 NYLAS_CLIENT_ID = os.environ.get("NYLAS_CLIENT_ID")
 NYLAS_API_KEY = os.environ.get("NYLAS_API_KEY")
 PUBLIC_BASE_URL = os.environ.get("PUBLIC_BASE_URL", "http://localhost:5000").rstrip("/")
 N8N_WEBHOOK_URL = os.environ.get("N8N_WEBHOOK_URL")
 
-# Retool
 RETOOL_EMBED_URL = os.environ.get(
     'RETOOL_EMBED_URL',
     'https://giladkahala.retool.com/apps/Analytics%20Dashboard'
 )
 
-# Validate environment
 if not SUPABASE_URL or not SUPABASE_ANON_KEY:
     raise ValueError("Missing SUPABASE_URL or SUPABASE_ANON_KEY")
 if not NYLAS_CLIENT_ID or not NYLAS_API_KEY:
     raise ValueError("Missing NYLAS_CLIENT_ID or NYLAS_API_KEY")
 
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_ANON_KEY)
-
-# ============================================================================
-# HTML Templates
-# ============================================================================
 
 LOGIN_TEMPLATE = '''<!DOCTYPE html>
 <html lang="en">
@@ -97,7 +85,7 @@ LOGIN_TEMPLATE = '''<!DOCTYPE html>
 </head>
 <body>
     <div class="container">
-        <h1>🔐 Email Analytics</h1>
+        <h1>Email Analytics</h1>
         <p>Enter your email to get started</p>
         {% if error %}
         <div class="message error">{{ error }}</div>
@@ -172,7 +160,7 @@ CONNECT_GMAIL_TEMPLATE = '''<!DOCTYPE html>
 </head>
 <body>
     <div class="container">
-        <h1>📧 Connect Your Gmail</h1>
+        <h1>Connect Your Gmail</h1>
         <p>To start tracking your emails, please connect your Gmail account.</p>
         <div class="user-email">{{ user_email }}</div>
         <a href="/api/nylas/connect?provider=google" class="connect-btn">
@@ -247,7 +235,7 @@ DASHBOARD_TEMPLATE = '''<!DOCTYPE html>
 </head>
 <body>
     <div class="header">
-        <h1>📊 Email Analytics Dashboard</h1>
+        <h1>Email Analytics Dashboard</h1>
         <div class="user-info">
             <span class="user-email">{{ user_email }}</span>
             <form method="POST" action="/logout" style="margin: 0;">
@@ -261,23 +249,14 @@ DASHBOARD_TEMPLATE = '''<!DOCTYPE html>
 </body>
 </html>'''
 
-# ============================================================================
-# Helper Functions
-# ============================================================================
-
 def nylas_headers():
     return {
         "Authorization": f"Bearer {NYLAS_API_KEY}",
         "Content-Type": "application/json",
     }
 
-# ============================================================================
-# Routes - Authentication Flow
-# ============================================================================
-
 @app.route('/')
 def index():
-    """Login page or redirect to dashboard if authenticated"""
     if 'user_email' in session:
         return redirect('/dashboard')
     
@@ -292,18 +271,15 @@ def index():
 
 @app.route('/request-magic-link', methods=['POST'])
 def request_magic_link():
-    """Create magic link for authentication"""
     email = request.form.get('email')
     
     if not email:
         return redirect('/?error=Email is required')
     
     try:
-        # Generate token
         token = secrets.token_urlsafe(32)
         expires_at = datetime.utcnow() + timedelta(hours=24)
         
-        # Store in Supabase
         supabase.table('magic_links').insert({
             'email': email,
             'token': token,
@@ -311,7 +287,6 @@ def request_magic_link():
             'used': False
         }).execute()
         
-        # Build magic link
         magic_link = f"{PUBLIC_BASE_URL}/auth/callback?token={token}"
         
         return render_template_string(
@@ -325,14 +300,12 @@ def request_magic_link():
 
 @app.route('/auth/callback')
 def auth_callback():
-    """Validate magic link and create session"""
     token = request.args.get('token')
     
     if not token:
         return redirect('/?error=No token provided')
     
     try:
-        # Get magic link from database
         response = supabase.table('magic_links').select('*').eq('token', token).execute()
         
         if not response.data:
@@ -340,39 +313,28 @@ def auth_callback():
         
         magic_link = response.data[0]
         
-        # Check expiry
         expires_at = datetime.fromisoformat(magic_link['expires_at'])
         if datetime.utcnow() > expires_at:
             return redirect('/?error=Link has expired')
         
-        # Check if used
         if magic_link['used']:
             return redirect('/?error=Link has already been used')
         
-        # Mark as used
         supabase.table('magic_links').update({'used': True}).eq('token', token).execute()
         
-        # Create session
         session['user_email'] = magic_link['email']
         session['authenticated'] = True
         
-        # Redirect to connect Gmail
         return redirect('/connect-gmail')
     
     except Exception as e:
         return redirect(f'/?error={str(e)}')
 
-# ============================================================================
-# Routes - Nylas OAuth Flow
-# ============================================================================
-
 @app.route('/connect-gmail')
 def connect_gmail():
-    """Show Gmail connection page"""
     if 'user_email' not in session:
         return redirect('/')
     
-    # Check if already connected
     if 'grant_id' in session:
         return redirect('/dashboard')
     
@@ -383,13 +345,11 @@ def connect_gmail():
 
 @app.route('/api/nylas/connect')
 def nylas_connect():
-    """Initiate Nylas OAuth flow"""
     if 'user_email' not in session:
         return redirect('/')
     
     provider = request.args.get("provider", "google")
     
-    # Generate state for CSRF protection
     state = secrets.token_urlsafe(24)
     session["oauth_state"] = state
     
@@ -408,19 +368,16 @@ def nylas_connect():
 
 @app.route('/api/nylas/callback')
 def nylas_callback():
-    """Handle Nylas OAuth callback"""
     code = request.args.get("code")
     state = request.args.get("state")
     
     if not code:
         return jsonify({"error": "Missing authorization code"}), 400
     
-    # Verify state
     if state != session.get("oauth_state"):
         return jsonify({"error": "Invalid state parameter"}), 400
     
     try:
-        # Exchange code for grant
         token_url = f"{NYLAS_API_URI}/v3/connect/token"
         payload = {
             "grant_type": "authorization_code",
@@ -439,7 +396,6 @@ def nylas_callback():
         response.raise_for_status()
         data = response.json()
         
-        # Extract grant info
         grant_id = data.get("grant_id")
         email = data.get("email")
         provider = data.get("provider", "google")
@@ -447,10 +403,8 @@ def nylas_callback():
         if not grant_id:
             return jsonify({"error": "No grant_id returned"}), 500
         
-        # Store in session
         session["grant_id"] = grant_id
         
-        # Trigger n8n webhook for email sync
         if N8N_WEBHOOK_URL:
             try:
                 n8n_payload = {
@@ -463,7 +417,6 @@ def nylas_callback():
             except Exception as e:
                 print(f"n8n webhook failed: {e}")
         
-        # Clean up
         session.pop("oauth_state", None)
         
         return redirect('/connected')
@@ -473,7 +426,6 @@ def nylas_callback():
 
 @app.route('/connected')
 def connected():
-    """Show success page after Gmail connection"""
     if 'user_email' not in session:
         return redirect('/')
     
@@ -511,25 +463,20 @@ def connected():
         </style>
     </head>
     <body>
-        <h1>✅ Gmail Connected!</h1>
+        <h1>Gmail Connected!</h1>
         <div class="success">
             <p>Email: <strong>{user_email}</strong></p>
             <p>Your Gmail is now connected and syncing.</p>
             <p>We're fetching your emails in the background.</p>
         </div>
-        <a href="/dashboard" class="button">View Dashboard →</a>
+        <a href="/dashboard" class="button">View Dashboard</a>
     </body>
     </html>
     """
     return html
 
-# ============================================================================
-# Routes - Dashboard
-# ============================================================================
-
 @app.route('/dashboard')
 def dashboard():
-    """Display Retool dashboard"""
     if 'user_email' not in session:
         return redirect('/')
     
@@ -544,38 +491,16 @@ def dashboard():
 
 @app.route('/logout', methods=['POST', 'GET'])
 def logout():
-    """Clear session and logout"""
     session.clear()
     return redirect('/')
 
 @app.route('/health')
 def health():
-    """Health check"""
     return jsonify({
         'status': 'ok', 
         'service': 'email-analytics-app'
     }), 200
 
-# ============================================================================
-# Run
-# ============================================================================
-
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     app.run(debug=False, host='0.0.0.0', port=port)
-```
-
----
-
-## 🎯 What Changed:
-
-**Added:**
-1. ✅ `/connect-gmail` route - Shows Gmail connection page
-2. ✅ `/api/nylas/connect` - Initiates OAuth
-3. ✅ `/api/nylas/callback` - Handles OAuth response
-4. ✅ `/connected` - Success page after Gmail connection
-5. ✅ n8n webhook trigger for email sync
-
-**Flow:**
-```
-Magic Link → Login → Connect Gmail → OAuth → n8n Sync → Dashboard
