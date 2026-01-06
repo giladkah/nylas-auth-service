@@ -142,13 +142,13 @@ DASHBOARD_TEMPLATE = '''<!DOCTYPE html>
         .user-info {
             display: flex;
             align-items: center;
-            gap: 20px;
+            gap: 15px;
         }
         .user-email {
             font-size: 14px;
             opacity: 0.9;
         }
-        .logout-btn {
+        .sync-btn, .logout-btn {
             background: rgba(255, 255, 255, 0.2);
             color: white;
             border: 1px solid rgba(255, 255, 255, 0.3);
@@ -158,8 +158,12 @@ DASHBOARD_TEMPLATE = '''<!DOCTYPE html>
             font-size: 14px;
             transition: all 0.3s ease;
         }
-        .logout-btn:hover {
+        .sync-btn:hover, .logout-btn:hover {
             background: rgba(255, 255, 255, 0.3);
+        }
+        .sync-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
         }
         .dashboard-container {
             flex: 1;
@@ -171,6 +175,30 @@ DASHBOARD_TEMPLATE = '''<!DOCTYPE html>
             height: 100%;
             border: none;
         }
+        .notification {
+            position: fixed;
+            top: 80px;
+            right: 30px;
+            background: white;
+            padding: 15px 20px;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+            display: none;
+            z-index: 1000;
+            animation: slideIn 0.3s ease-out;
+        }
+        @keyframes slideIn {
+            from { transform: translateX(400px); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+        .notification.success {
+            border-left: 4px solid #27ae60;
+            color: #27ae60;
+        }
+        .notification.error {
+            border-left: 4px solid #e74c3c;
+            color: #e74c3c;
+        }
     </style>
 </head>
 <body>
@@ -178,14 +206,70 @@ DASHBOARD_TEMPLATE = '''<!DOCTYPE html>
         <h1>Email Analytics Dashboard</h1>
         <div class="user-info">
             <span class="user-email">{{ user_email }}</span>
+            <button onclick="syncEmails()" class="sync-btn" id="syncBtn">
+                🔄 Sync Emails
+            </button>
             <form method="POST" action="/logout" style="margin: 0;">
                 <button type="submit" class="logout-btn">Logout</button>
             </form>
         </div>
     </div>
+    
+    <div id="notification" class="notification"></div>
+    
     <div class="dashboard-container">
-        <iframe src="{{ retool_url }}" allow="clipboard-read; clipboard-write"></iframe>
+        <iframe src="{{ retool_url }}" allow="clipboard-read; clipboard-write" id="dashboardFrame"></iframe>
     </div>
+
+    <script>
+        function showNotification(message, type) {
+            const notification = document.getElementById('notification');
+            notification.textContent = message;
+            notification.className = 'notification ' + type;
+            notification.style.display = 'block';
+            
+            setTimeout(() => {
+                notification.style.display = 'none';
+            }, 4000);
+        }
+
+        async function syncEmails() {
+            const btn = document.getElementById('syncBtn');
+            const originalText = btn.textContent;
+            
+            // Disable button and show loading
+            btn.disabled = true;
+            btn.textContent = '⏳ Syncing...';
+            
+            try {
+                const response = await fetch('/api/trigger-sync', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    showNotification('✓ Emails syncing! Dashboard will refresh in a moment...', 'success');
+                    
+                    // Reload iframe after 3 seconds
+                    setTimeout(() => {
+                        document.getElementById('dashboardFrame').src = document.getElementById('dashboardFrame').src;
+                    }, 3000);
+                } else {
+                    showNotification('⚠️ Sync failed: ' + data.message, 'error');
+                }
+            } catch (error) {
+                showNotification('❌ Error: ' + error.message, 'error');
+            } finally {
+                // Re-enable button
+                btn.disabled = false;
+                btn.textContent = originalText;
+            }
+        }
+    </script>
 </body>
 </html>'''
 
