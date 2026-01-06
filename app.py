@@ -296,6 +296,50 @@ def oauth_callback():
         return redirect(f'/?error={str(e)}')
 
 
+@app.route('/api/trigger-sync', methods=['POST'])
+def trigger_sync():
+    """Proxy endpoint to trigger n8n sync"""
+    if 'user_email' not in session:
+        return jsonify({'error': 'Not authenticated'}), 401
+    
+    email = session.get('user_email')
+    grant_id = session.get('grant_id')
+    
+    if not N8N_WEBHOOK_URL:
+        return jsonify({'error': 'Sync not configured'}), 500
+    
+    try:
+        payload = {
+            "grant_id": grant_id,
+            "email": email,
+            "provider": "google",
+            "action": "manual_sync"
+        }
+        
+        response = requests.post(
+            N8N_WEBHOOK_URL,
+            json=payload,
+            timeout=30
+        )
+        
+        if response.status_code == 200:
+            return jsonify({
+                'success': True,
+                'message': 'Sync triggered successfully'
+            }), 200
+        else:
+            return jsonify({
+                'success': False,
+                'message': 'Sync failed'
+            }), 500
+            
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'message': str(e)
+        }), 500
+
+
 @app.route('/dashboard')
 def dashboard():
     if 'user_email' not in session:
