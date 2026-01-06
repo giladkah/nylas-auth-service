@@ -262,17 +262,31 @@ def oauth_callback():
         session["grant_id"] = grant_id
         session["provider"] = provider
         
-        # Trigger n8n webhook for email sync
+        # ALWAYS trigger n8n webhook (it handles upsert logic)
         if N8N_WEBHOOK_URL:
             try:
                 n8n_payload = {
                     "grant_id": grant_id,
                     "email": email,
                     "provider": provider,
+                    "action": "sync",  # Add this to help n8n distinguish
                 }
-                requests.post(N8N_WEBHOOK_URL, json=n8n_payload, timeout=30)
+                
+                webhook_response = requests.post(
+                    N8N_WEBHOOK_URL, 
+                    json=n8n_payload, 
+                    timeout=30
+                )
+                
+                # Log response for debugging
+                if webhook_response.status_code != 200:
+                    print(f"⚠️ n8n webhook returned {webhook_response.status_code}")
+                else:
+                    print(f"✓ Triggered sync for {email}")
+                    
             except Exception as e:
-                print(f"n8n webhook failed: {e}")
+                print(f"❌ n8n webhook failed: {e}")
+                # Don't block login on webhook failure
         
         session.pop("oauth_state", None)
         
@@ -280,6 +294,7 @@ def oauth_callback():
     
     except Exception as e:
         return redirect(f'/?error={str(e)}')
+
 
 @app.route('/dashboard')
 def dashboard():
