@@ -36,240 +36,472 @@ LANDING_TEMPLATE = '''<!DOCTYPE html>
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Email Analytics</title>
+    <title>ClientReady - A short list you can trust. Backed by evidence.</title>
+    <meta name="description" content="Client status, missing docs, and readiness—pulled from email and shown as three simple views.">
     <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
         body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            min-height: 100vh;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        }
-        .container {
-            background: white;
-            padding: 60px 40px;
-            border-radius: 10px;
-            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
-            width: 100%;
-            max-width: 500px;
-            text-align: center;
-        }
-        h1 { 
-            color: #333; 
-            margin-bottom: 15px; 
-            font-size: 32px;
-        }
-        .subtitle { 
-            color: #666; 
-            margin-bottom: 40px; 
-            font-size: 16px;
+            font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', 'Roboto', sans-serif;
             line-height: 1.6;
+            color: #1F2937;
+            background: #FFFFFF;
         }
-        .connect-btn {
-            display: inline-block;
-            padding: 16px 48px;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            text-decoration: none;
-            border-radius: 8px;
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 20px;
+        }
+        
+        /* Hero Section */
+        .hero {
+            text-align: center;
+            padding: 80px 20px;
+            background: linear-gradient(to bottom, #F9FAFB 0%, #FFFFFF 100%);
+        }
+        
+        .logo {
             font-size: 18px;
             font-weight: 600;
-            transition: transform 0.2s, box-shadow 0.2s;
+            color: #3B82F6;
+            margin-bottom: 40px;
         }
-        .connect-btn:hover { 
-            transform: translateY(-2px); 
-            box-shadow: 0 10px 25px rgba(102, 126, 234, 0.4);
+        
+        h1 {
+            font-size: 48px;
+            font-weight: 700;
+            margin-bottom: 20px;
+            line-height: 1.2;
         }
-        .features {
-            margin-top: 40px;
-            text-align: left;
-            padding-top: 30px;
-            border-top: 1px solid #eee;
-        }
-        .feature {
-            margin-bottom: 15px;
-            color: #666;
-            font-size: 14px;
-        }
-    </style>
-</head>
-<body>
-    <div class="container">
-        <h1>📧 Email Analytics</h1>
-        <p class="subtitle">Track and analyze your client emails in one place</p>
-        <a href="/connect" class="connect-btn">
-            Connect Your Gmail
-        </a>
-        <div class="features">
-            <div class="feature">✓ Automatic email syncing</div>
-            <div class="feature">✓ Client communication tracking</div>
-            <div class="feature">✓ Document management</div>
-        </div>
-    </div>
-</body>
-</html>'''
-
-DASHBOARD_TEMPLATE = '''<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Email Analytics Dashboard</title>
-    <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            height: 100vh;
-            display: flex;
-            flex-direction: column;
-            background: #f5f5f5;
-        }
-        .header {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            padding: 15px 30px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
-        }
-        .header h1 {
+        
+        .subtitle {
             font-size: 20px;
-            font-weight: 600;
+            color: #6B7280;
+            margin-bottom: 40px;
+            max-width: 700px;
+            margin-left: auto;
+            margin-right: auto;
         }
-        .user-info {
+        
+        .cta-buttons {
+            display: flex;
+            gap: 16px;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+        
+        .btn {
+            padding: 14px 32px;
+            font-size: 16px;
+            font-weight: 600;
+            border-radius: 8px;
+            text-decoration: none;
+            transition: all 0.2s;
+            cursor: pointer;
+            border: 2px solid transparent;
+            display: inline-block;
+        }
+        
+        .btn-primary {
+            background: #3B82F6;
+            color: white;
+        }
+        
+        .btn-primary:hover {
+            background: #2563EB;
+        }
+        
+        /* Problem Section */
+        .problem {
+            padding: 60px 20px;
+            background: white;
+        }
+        
+        .problem h2 {
+            font-size: 28px;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        
+        .problem ul {
+            list-style: none;
+            max-width: 600px;
+            margin: 0 auto;
+        }
+        
+        .problem li {
+            padding: 12px 0 12px 30px;
+            position: relative;
+            font-size: 18px;
+            color: #4B5563;
+        }
+        
+        .problem li:before {
+            content: "•";
+            position: absolute;
+            left: 0;
+            color: #3B82F6;
+            font-size: 24px;
+        }
+        
+        /* Cards Section */
+        .cards {
+            padding: 80px 20px;
+            background: #F9FAFB;
+        }
+        
+        .cards h2 {
+            font-size: 32px;
+            text-align: center;
+            margin-bottom: 50px;
+        }
+        
+        .card-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 30px;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        
+        .card {
+            background: white;
+            border-radius: 12px;
+            padding: 30px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            border-left: 4px solid;
+        }
+        
+        .card.attention {
+            border-left-color: #EF4444;
+        }
+        
+        .card.waiting {
+            border-left-color: #FBBF24;
+        }
+        
+        .card.no-action {
+            border-left-color: #10B981;
+        }
+        
+        .card-header {
+            font-size: 20px;
+            font-weight: 700;
+            margin-bottom: 20px;
             display: flex;
             align-items: center;
-            gap: 15px;
+            gap: 10px;
         }
-        .user-email {
+        
+        .status-indicator {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+        }
+        
+        .attention .status-indicator {
+            background: #EF4444;
+        }
+        
+        .waiting .status-indicator {
+            background: #FBBF24;
+        }
+        
+        .no-action .status-indicator {
+            background: #10B981;
+        }
+        
+        .card-field {
+            margin-bottom: 16px;
+        }
+        
+        .card-label {
+            font-weight: 600;
             font-size: 14px;
-            opacity: 0.9;
+            color: #6B7280;
+            margin-bottom: 4px;
         }
-        .sync-btn, .logout-btn {
-            background: rgba(255, 255, 255, 0.2);
-            color: white;
-            border: 1px solid rgba(255, 255, 255, 0.3);
-            padding: 8px 16px;
-            border-radius: 5px;
-            cursor: pointer;
+        
+        .card-value {
+            font-size: 16px;
+            color: #1F2937;
+        }
+        
+        .evidence {
+            background: #F3F4F6;
+            padding: 12px;
+            border-radius: 6px;
+            font-family: 'Courier New', monospace;
             font-size: 14px;
-            transition: all 0.3s ease;
+            color: #374151;
+            margin-top: 8px;
         }
-        .sync-btn:hover, .logout-btn:hover {
-            background: rgba(255, 255, 255, 0.3);
-        }
-        .sync-btn:disabled {
-            opacity: 0.5;
-            cursor: not-allowed;
-        }
-        .dashboard-container {
-            flex: 1;
-            display: flex;
-            overflow: hidden;
-        }
-        iframe {
-            width: 100%;
-            height: 100%;
-            border: none;
-        }
-        .notification {
-            position: fixed;
-            top: 80px;
-            right: 30px;
+        
+        /* Why It Matters */
+        .why-matters {
+            padding: 60px 20px;
             background: white;
-            padding: 15px 20px;
-            border-radius: 8px;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-            display: none;
-            z-index: 1000;
-            animation: slideIn 0.3s ease-out;
         }
-        @keyframes slideIn {
-            from { transform: translateX(400px); opacity: 0; }
-            to { transform: translateX(0); opacity: 1; }
+        
+        .why-matters h2 {
+            font-size: 28px;
+            text-align: center;
+            margin-bottom: 30px;
         }
-        .notification.success {
-            border-left: 4px solid #27ae60;
-            color: #27ae60;
+        
+        .why-matters ul {
+            list-style: none;
+            max-width: 600px;
+            margin: 0 auto;
         }
-        .notification.error {
-            border-left: 4px solid #e74c3c;
-            color: #e74c3c;
+        
+        .why-matters li {
+            padding: 12px 0 12px 30px;
+            position: relative;
+            font-size: 18px;
         }
-    </style>
-</head>
-<body>
-    <div class="header">
-        <h1>Email Analytics Dashboard</h1>
-        <div class="user-info">
-            <span class="user-email">{{ user_email }}</span>
-            <button onclick="syncEmails()" class="sync-btn" id="syncBtn">
-                🔄 Sync Emails
-            </button>
-            <form method="POST" action="/logout" style="margin: 0;">
-                <button type="submit" class="logout-btn">Logout</button>
-            </form>
-        </div>
-    </div>
-    
-    <div id="notification" class="notification"></div>
-    
-    <div class="dashboard-container">
-        <iframe src="{{ retool_url }}" allow="clipboard-read; clipboard-write" id="dashboardFrame"></iframe>
-    </div>
-
-    <script>
-        function showNotification(message, type) {
-            const notification = document.getElementById('notification');
-            notification.textContent = message;
-            notification.className = 'notification ' + type;
-            notification.style.display = 'block';
+        
+        .why-matters li:before {
+            content: "✓";
+            position: absolute;
+            left: 0;
+            color: #10B981;
+            font-weight: 700;
+        }
+        
+        /* Trust Section */
+        .trust {
+            padding: 60px 20px;
+            background: #EFF6FF;
+        }
+        
+        .trust-box {
+            max-width: 700px;
+            margin: 0 auto;
+            text-align: center;
+        }
+        
+        .trust h2 {
+            font-size: 28px;
+            margin-bottom: 30px;
+        }
+        
+        .trust ul {
+            list-style: none;
+            text-align: left;
+        }
+        
+        .trust li {
+            padding: 12px 0 12px 30px;
+            position: relative;
+            font-size: 18px;
+        }
+        
+        .trust li:before {
+            content: "🔒";
+            position: absolute;
+            left: 0;
+        }
+        
+        /* CTA Section */
+        .cta-section {
+            padding: 80px 20px;
+            background: white;
+            text-align: center;
+        }
+        
+        .cta-section h2 {
+            font-size: 32px;
+            margin-bottom: 16px;
+        }
+        
+        .cta-section p {
+            font-size: 18px;
+            color: #6B7280;
+            margin-bottom: 40px;
+        }
+        
+        /* Footer */
+        footer {
+            padding: 40px 20px;
+            background: #F9FAFB;
+            text-align: center;
+            color: #6B7280;
+        }
+        
+        /* Mobile Responsive */
+        @media (max-width: 768px) {
+            h1 {
+                font-size: 36px;
+            }
             
-            setTimeout(() => {
-                notification.style.display = 'none';
-            }, 4000);
-        }
-
-        async function syncEmails() {
-            const btn = document.getElementById('syncBtn');
-            const originalText = btn.textContent;
+            .subtitle {
+                font-size: 18px;
+            }
             
-            // Disable button and show loading
-            btn.disabled = true;
-            btn.textContent = '⏳ Syncing...';
+            .card-grid {
+                grid-template-columns: 1fr;
+            }
             
-            try {
-                const response = await fetch('/api/trigger-sync', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    }
-                });
-                
-                const data = await response.json();
-                
-                if (data.success) {
-                    showNotification('✓ Emails syncing! Dashboard will refresh in a moment...', 'success');
-                    
-                    // Reload iframe after 3 seconds
-                    setTimeout(() => {
-                        document.getElementById('dashboardFrame').src = document.getElementById('dashboardFrame').src;
-                    }, 3000);
-                } else {
-                    showNotification('⚠️ Sync failed: ' + data.message, 'error');
-                }
-            } catch (error) {
-                showNotification('❌ Error: ' + error.message, 'error');
-            } finally {
-                // Re-enable button
-                btn.disabled = false;
-                btn.textContent = originalText;
+            .cta-buttons {
+                flex-direction: column;
+            }
+            
+            .btn {
+                width: 100%;
             }
         }
-    </script>
+    </style>
+</head>
+<body>
+    <!-- Hero Section -->
+    <section class="hero">
+        <div class="container">
+            <div class="logo">ClientReady</div>
+            <h1>A short list you can trust.<br>Backed by evidence.</h1>
+            <p class="subtitle">Client status, missing docs, and readiness—pulled from email and shown as three simple views.</p>
+            <div class="cta-buttons">
+                <a href="/connect" class="btn btn-primary">Connect Your Gmail</a>
+            </div>
+        </div>
+    </section>
+
+    <!-- Problem Section -->
+    <section class="problem">
+        <div class="container">
+            <h2>You're tired of:</h2>
+            <ul>
+                <li>Rescanning the same email threads</li>
+                <li>Finding missing docs when you're already late</li>
+                <li>Not knowing who's actually ready to file</li>
+                <li>Client status living in your head instead of a system</li>
+            </ul>
+        </div>
+    </section>
+
+    <!-- Cards Section -->
+    <section class="cards">
+        <div class="container">
+            <h2>This is what you see:</h2>
+            <div class="card-grid">
+                <!-- Card 1 -->
+                <div class="card attention">
+                    <div class="card-header">
+                        <span class="status-indicator"></span>
+                        Needs Attention
+                    </div>
+                    <div class="card-field">
+                        <div class="card-label">Status:</div>
+                        <div class="card-value">CPA review required</div>
+                    </div>
+                    <div class="card-field">
+                        <div class="card-label">Reason:</div>
+                        <div class="card-value">W-2 and bank statements received</div>
+                    </div>
+                    <div class="card-field">
+                        <div class="card-label">Evidence:</div>
+                        <div class="evidence">
+[DEMO] 2024 tax documents<br>
+→ W2_2024.pdf<br>
+→ Bank_Statements_2024.pdf
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Card 2 -->
+                <div class="card waiting">
+                    <div class="card-header">
+                        <span class="status-indicator"></span>
+                        Waiting
+                    </div>
+                    <div class="card-field">
+                        <div class="card-label">Status:</div>
+                        <div class="card-value">Blocked</div>
+                    </div>
+                    <div class="card-field">
+                        <div class="card-label">Reason:</div>
+                        <div class="card-value">Missing K-1 from partnership</div>
+                    </div>
+                    <div class="card-field">
+                        <div class="card-label">Evidence:</div>
+                        <div class="evidence">
+[DEMO] Re: Missing K-1 for 2024<br>
+Client confirmed delay 2 days ago
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Card 3 -->
+                <div class="card no-action">
+                    <div class="card-header">
+                        <span class="status-indicator"></span>
+                        No Action Required
+                    </div>
+                    <div class="card-field">
+                        <div class="card-label">Status:</div>
+                        <div class="card-value">Safe to ignore</div>
+                    </div>
+                    <div class="card-field">
+                        <div class="card-label">Reason:</div>
+                        <div class="card-value">Only shipping notifications</div>
+                    </div>
+                    <div class="card-field">
+                        <div class="card-label">Evidence:</div>
+                        <div class="evidence">
+3 delivery confirmations from iHerb
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Why It Matters -->
+    <section class="why-matters">
+        <div class="container">
+            <h2>Why this matters</h2>
+            <ul>
+                <li>Stop rescanning the same threads</li>
+                <li>Catch missing docs before you're late</li>
+                <li>Feel confident you're not forgetting someone</li>
+            </ul>
+        </div>
+    </section>
+
+    <!-- Trust Section -->
+    <section class="trust">
+        <div class="container">
+            <div class="trust-box">
+                <h2>You stay in control</h2>
+                <ul>
+                    <li>Nothing gets sent automatically</li>
+                    <li>You can override any status</li>
+                    <li>Your data isn't used to train public models</li>
+                </ul>
+            </div>
+        </div>
+    </section>
+
+    <!-- CTA Section -->
+    <section class="cta-section">
+        <div class="container">
+            <h2>Ready to try it?</h2>
+            <p>Connect your Gmail and see your clients organized in minutes.</p>
+            <a href="/connect" class="btn btn-primary">Connect Your Gmail</a>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer>
+        <div class="container">
+            <p><strong>ClientReady</strong> — Built for CPAs who don't trust task lists.</p>
+        </div>
+    </footer>
 </body>
 </html>'''
 
