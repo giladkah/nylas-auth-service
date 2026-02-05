@@ -794,4 +794,64 @@ def trigger_sync():
     if not N8N_WEBHOOK_URL:
         return jsonify({'error': 'Sync not configured'}), 500
     
-    try
+    try:
+        payload = {
+            "grant_id": grant_id,
+            "email": email,
+            "provider": "google",
+            "action": "manual_sync"
+        }
+        
+        response = requests.post(
+            N8N_WEBHOOK_URL,
+            json=payload,
+            timeout=30
+        )
+        
+        if response.status_code == 200:
+            return jsonify({
+                'success': True,
+                'message': 'Sync triggered successfully'
+            }), 200
+        else:
+            return jsonify({
+                'success': False,
+                'message': 'Sync failed'
+            }), 500
+            
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'message': str(e)
+        }), 500
+
+
+@app.route('/dashboard')
+def dashboard():
+    if 'user_email' not in session:
+        return redirect('/')
+    
+    email = session.get('user_email')
+    retool_url = f"{RETOOL_EMBED_URL}?email={email}"
+    
+    return render_template_string(
+        DASHBOARD_TEMPLATE,
+        user_email=email,
+        retool_url=retool_url
+    )
+
+@app.route('/logout', methods=['POST', 'GET'])
+def logout():
+    session.clear()
+    return redirect('/')
+
+@app.route('/health')
+def health():
+    return jsonify({
+        'status': 'ok', 
+        'service': 'clientready-app'
+    }), 200
+
+if __name__ == '__main__':
+    port = int(os.environ.get('PORT', 5000))
+    app.run(debug=False, host='0.0.0.0', port=port)
