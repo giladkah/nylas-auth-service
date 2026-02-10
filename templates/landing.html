@@ -1,382 +1,1121 @@
-import os
-import secrets
-import requests
-from urllib.parse import urlencode
-from flask import Flask, request, render_template, render_template_string, redirect, session, jsonify
-from supabase import create_client, Client
-
-app = Flask(__name__)
-app.secret_key = os.environ.get('SECRET_KEY', 'dev-secret-key-change-in-production')
-
-# Supabase (just for storing user data, not auth)
-SUPABASE_URL = os.environ.get('SUPABASE_URL')
-SUPABASE_ANON_KEY = os.environ.get('SUPABASE_ANON_KEY')
-
-# Nylas
-NYLAS_API_URI = os.environ.get("NYLAS_API_URI", "https://api.us.nylas.com").rstrip("/")
-NYLAS_CLIENT_ID = os.environ.get("NYLAS_CLIENT_ID")
-NYLAS_API_KEY = os.environ.get("NYLAS_API_KEY")
-PUBLIC_BASE_URL = os.environ.get("PUBLIC_BASE_URL", "http://localhost:5000").rstrip("/")
-N8N_WEBHOOK_URL = os.environ.get("N8N_WEBHOOK_URL")
-
-# Retool
-RETOOL_EMBED_URL = os.environ.get(
-    'RETOOL_EMBED_URL',
-    'https://giladkahala.retool.com/apps/Analytics%20Dashboard'
-)
-
-if not NYLAS_CLIENT_ID or not NYLAS_API_KEY:
-    raise ValueError("Missing NYLAS_CLIENT_ID or NYLAS_API_KEY")
-
-supabase: Client = create_client(SUPABASE_URL, SUPABASE_ANON_KEY) if SUPABASE_URL and SUPABASE_ANON_KEY else None
-
-# ============================================
-# TEMPLATES (dashboard stays inline for now)
-# ============================================
-
-DASHBOARD_TEMPLATE = '''<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ClientReady Dashboard</title>
+    <title>ClientReady — Email-Based Client Status for CPAs</title>
+    <meta name="description" content="A short list you can trust. Backed by evidence. ClientReady reads email threads, extracts status, and shows only what matters.">
+    <meta name="author" content="ClientReady">
+    <meta property="og:title" content="ClientReady — Email-Based Client Status for CPAs">
+    <meta property="og:description" content="A short list you can trust. Backed by evidence. Client status, missing docs, and readiness—pulled from email.">
+    <meta property="og:type" content="website">
+    <meta name="twitter:card" content="summary_large_image">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
+        /* ── CSS Variables (shadcn/ui light theme) ── */
+        :root {
+            --background: 0 0% 100%;
+            --foreground: 240 10% 3.9%;
+            --card: 0 0% 100%;
+            --card-foreground: 240 10% 3.9%;
+            --primary: 221.2 83.2% 53.3%;
+            --primary-foreground: 210 40% 98%;
+            --secondary: 240 4.8% 95.9%;
+            --secondary-foreground: 240 5.9% 10%;
+            --muted: 240 4.8% 95.9%;
+            --muted-foreground: 240 3.8% 46.1%;
+            --border: 240 5.9% 90%;
+            --ring: 221.2 83.2% 53.3%;
+            --radius: 0.5rem;
+            --destructive: 0 84.2% 60.2%;
+
+            /* Custom status colors */
+            --status-safe: 142 71% 45%;
+            --status-waiting: 38 92% 50%;
+            --status-attention: 0 84% 60%;
+            --security-warning: 25 95% 53%;
+            --security-warning-bg: 25 95% 53% / 0.15;
+            --security-danger: 0 72% 51%;
+            --security-danger-bg: 0 72% 51% / 0.08;
+
+            /* Dark section */
+            --dark-bg: 225 20% 10%;
+            --dark-foreground: 0 0% 95%;
+            --dark-muted: 0 0% 65%;
+
+            /* Trust section */
+            --trust-bg: 220 60% 97%;
+            --trust-border: 220 40% 90%;
+        }
+
+        /* ── Reset & Base ── */
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+        html { scroll-behavior: smooth; }
         body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            height: 100vh;
+            font-family: 'Inter', ui-sans-serif, system-ui, -apple-system, sans-serif;
+            line-height: 1.6;
+            color: hsl(var(--foreground));
+            background: hsl(var(--background));
+            -webkit-font-smoothing: antialiased;
+        }
+        a { color: inherit; text-decoration: none; }
+        ul { list-style: none; }
+        img, svg { display: block; }
+
+        /* ── Layout ── */
+        .container-narrow {
+            max-width: 1100px;
+            margin: 0 auto;
+            padding: 0 24px;
+        }
+
+        /* ── Header ── */
+        header {
+            position: sticky;
+            top: 0;
+            z-index: 50;
+            background: hsl(var(--background) / 0.8);
+            backdrop-filter: blur(12px);
+            border-bottom: 1px solid hsl(var(--border) / 0.5);
+        }
+        header .inner {
+            padding: 16px 0;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .logo-group {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .logo-icon {
+            width: 32px; height: 32px;
+            border-radius: 8px;
+            background: hsl(var(--primary));
+            display: flex; align-items: center; justify-content: center;
+            color: hsl(var(--primary-foreground));
+            font-weight: 700; font-size: 14px;
+        }
+        .logo-text { font-weight: 600; }
+
+        /* ── Buttons ── */
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            font-weight: 600;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.2s;
+            text-decoration: none;
+            white-space: nowrap;
+        }
+        .btn:active { transform: scale(0.98); }
+        .btn-sm {
+            height: 36px;
+            padding: 0 12px;
+            font-size: 13px;
+            border-radius: 6px;
+        }
+        .btn-lg {
+            height: 56px;
+            padding: 0 32px;
+            font-size: 16px;
+        }
+        .btn-primary {
+            background: hsl(var(--primary));
+            color: hsl(var(--primary-foreground));
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+        .btn-primary:hover {
+            background: hsl(var(--primary) / 0.9);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        }
+        .link-arrow {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            color: hsl(var(--muted-foreground));
+            font-weight: 500;
+            transition: color 0.2s;
+        }
+        .link-arrow:hover { color: hsl(var(--foreground)); }
+
+        /* ── Hero ── */
+        .hero {
+            padding: 64px 0 80px;
+            text-align: center;
+        }
+        .hero h1 {
+            font-size: clamp(2rem, 5vw, 3.75rem);
+            font-weight: 600;
+            line-height: 1.15;
+            margin-bottom: 24px;
+            text-wrap: balance;
+        }
+        .hero h1 .accent { color: hsl(var(--primary)); }
+        .hero .subtitle {
+            font-size: clamp(1rem, 2vw, 1.25rem);
+            color: hsl(var(--muted-foreground));
+            margin-bottom: 8px;
+            text-wrap: balance;
+            max-width: 700px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+        .hero .sub2 {
+            font-size: 1rem;
+            color: hsl(var(--muted-foreground));
+            margin-bottom: 24px;
+        }
+
+        /* Badges row */
+        .badge-row {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 16px;
+            margin-bottom: 32px;
+            flex-wrap: wrap;
+        }
+        .badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            background: hsl(var(--secondary) / 0.5);
+            padding: 8px 16px;
+            border-radius: 9999px;
+            font-size: 14px;
+            font-weight: 500;
+        }
+        .badge svg { width: 16px; height: 16px; }
+        .badge .safe { color: hsl(var(--status-safe)); }
+        .badge .pri { color: hsl(var(--primary)); }
+
+        .hero-actions {
             display: flex;
             flex-direction: column;
-            background: #f5f5f5;
-        }
-        .header {
-            background: #3B82F6;
-            color: white;
-            padding: 15px 30px;
-            display: flex;
-            justify-content: space-between;
             align-items: center;
-            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            gap: 16px;
         }
-        .header h1 {
-            font-size: 20px;
+        @media (min-width: 640px) {
+            .hero-actions { flex-direction: row; justify-content: center; }
+        }
+
+        /* ── Inbox Preview ── */
+        .inbox-preview {
+            background: hsl(var(--card));
+            border-radius: 12px;
+            border: 1px solid hsl(var(--border));
+            box-shadow: 0 10px 25px rgba(0,0,0,0.08);
+            overflow: hidden;
+            margin-top: 48px;
+            text-align: left;
+        }
+        .inbox-bar {
+            background: hsl(var(--muted) / 0.5);
+            padding: 12px 16px;
+            border-bottom: 1px solid hsl(var(--border));
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .inbox-dots { display: flex; gap: 6px; }
+        .inbox-dots span {
+            width: 12px; height: 12px; border-radius: 50%;
+        }
+        .dot-red { background: hsl(var(--destructive) / 0.6); }
+        .dot-yellow { background: hsl(var(--status-waiting) / 0.6); }
+        .dot-green { background: hsl(var(--status-safe) / 0.6); }
+        .inbox-bar .label {
+            font-size: 14px;
+            color: hsl(var(--muted-foreground));
+            margin-left: 8px;
+        }
+        .inbox-row {
+            padding: 12px 16px;
+            display: flex;
+            align-items: flex-start;
+            gap: 12px;
+            border-bottom: 1px solid hsl(var(--border));
+            transition: background 0.15s;
+        }
+        .inbox-row:last-child { border-bottom: none; }
+        .inbox-row:hover { background: hsl(var(--muted) / 0.3); }
+        .inbox-dot {
+            width: 8px; height: 8px;
+            border-radius: 50%;
+            margin-top: 8px;
+            flex-shrink: 0;
+        }
+        .inbox-content { flex: 1; min-width: 0; }
+        .inbox-sender {
+            font-weight: 500;
+            font-size: 14px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .inbox-subject {
+            font-size: 14px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .inbox-snippet {
+            font-size: 12px;
+            color: hsl(var(--muted-foreground));
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .suspicious-row {
+            background: hsl(var(--security-danger-bg));
+            border-left: 4px solid hsl(var(--security-warning));
+        }
+        .suspicious-row:hover { background: hsl(var(--security-danger-bg)); }
+        .suspicious-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            font-size: 12px;
+            font-weight: 500;
+            color: hsl(var(--security-warning));
+            background: hsl(var(--security-warning-bg));
+            padding: 2px 8px;
+            border-radius: 9999px;
+        }
+        .suspicious-badge svg { width: 12px; height: 12px; }
+        .text-danger { color: hsl(var(--security-danger)); }
+
+        /* ── Section: How It Works ── */
+        .how-it-works {
+            padding: 64px 0 80px;
+            background: hsl(var(--secondary) / 0.3);
+        }
+        .section-header {
+            text-align: center;
+            margin-bottom: 48px;
+        }
+        .section-header h2 {
+            font-size: clamp(1.5rem, 3vw, 1.875rem);
             font-weight: 600;
+            margin-bottom: 12px;
         }
-        .user-info {
-            display: flex;
-            align-items: center;
-            gap: 15px;
+        .section-header p {
+            font-size: 1.125rem;
+            color: hsl(var(--muted-foreground));
         }
-        .user-email {
+        .steps-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 24px;
+        }
+        .step-card {
+            background: hsl(var(--card));
+            border: 1px solid hsl(var(--border));
+            border-radius: 12px;
+            padding: 24px;
+            text-align: center;
+        }
+        .step-num {
+            width: 40px; height: 40px;
+            border-radius: 50%;
+            background: hsl(var(--primary));
+            color: hsl(var(--primary-foreground));
+            display: flex; align-items: center; justify-content: center;
+            font-weight: 600; font-size: 18px;
+            margin: 0 auto 16px;
+        }
+        .step-icon {
+            display: flex; justify-content: center; margin-bottom: 12px;
+        }
+        .step-icon svg { width: 24px; height: 24px; color: hsl(var(--primary)); }
+        .step-card h3 {
+            font-size: 1.125rem;
+            font-weight: 600;
+            margin-bottom: 8px;
+        }
+        .step-card p {
             font-size: 14px;
-            opacity: 0.9;
+            color: hsl(var(--muted-foreground));
         }
-        .sync-btn, .logout-btn {
-            background: rgba(255, 255, 255, 0.2);
-            color: white;
-            border: 1px solid rgba(255, 255, 255, 0.3);
-            padding: 8px 16px;
-            border-radius: 5px;
-            cursor: pointer;
-            font-size: 14px;
-            transition: all 0.3s ease;
-        }
-        .sync-btn:hover, .logout-btn:hover {
-            background: rgba(255, 255, 255, 0.3);
-        }
-        .sync-btn:disabled {
-            opacity: 0.5;
-            cursor: not-allowed;
-        }
-        .dashboard-container {
-            flex: 1;
-            display: flex;
+
+        /* ── Section: Security (dark) ── */
+        .security-section {
+            padding: 64px 0 80px;
+            background: hsl(var(--dark-bg));
+            color: hsl(var(--dark-foreground));
             overflow: hidden;
         }
-        iframe {
-            width: 100%;
-            height: 100%;
-            border: none;
+        .security-section .section-header h2 {
+            color: hsl(var(--dark-foreground));
         }
-        .notification {
-            position: fixed;
-            top: 80px;
-            right: 30px;
-            background: white;
-            padding: 15px 20px;
+        .security-section .section-header p {
+            color: hsl(var(--dark-muted));
+        }
+        .stat-badge {
+            display: inline-block;
+            background: hsl(var(--security-warning) / 0.2);
+            border: 1px solid hsl(var(--security-warning) / 0.3);
             border-radius: 8px;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-            display: none;
-            z-index: 1000;
-            animation: slideIn 0.3s ease-out;
+            padding: 12px 24px;
+            margin-bottom: 24px;
         }
-        @keyframes slideIn {
-            from { transform: translateX(400px); opacity: 0; }
-            to { transform: translateX(0); opacity: 1; }
+        .stat-badge .number {
+            font-size: clamp(1.875rem, 4vw, 3rem);
+            font-weight: 700;
+            color: hsl(var(--security-warning));
         }
-        .notification.success {
-            border-left: 4px solid #27ae60;
-            color: #27ae60;
+        .stat-badge .label {
+            font-size: clamp(0.75rem, 1.5vw, 0.875rem);
+            color: hsl(var(--dark-muted));
+            margin-top: 4px;
         }
-        .notification.error {
-            border-left: 4px solid #e74c3c;
-            color: #e74c3c;
+
+        .email-compare {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 16px;
+            margin-bottom: 40px;
         }
+        @media (min-width: 768px) {
+            .email-compare { grid-template-columns: 1fr 1fr; gap: 24px; }
+        }
+        .email-card {
+            background: hsl(var(--card) / 0.1);
+            backdrop-filter: blur(4px);
+            border-radius: 12px;
+            border: 1px solid rgba(255,255,255,0.1);
+            overflow: hidden;
+        }
+        .email-card.danger {
+            border: 2px solid hsl(var(--security-warning) / 0.4);
+            box-shadow: 0 0 20px 4px hsl(var(--security-warning) / 0.15);
+        }
+        .email-card-header {
+            padding: 8px 16px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+        }
+        .email-card-header svg { width: 16px; height: 16px; }
+        .email-card-header span { font-size: 14px; font-weight: 500; }
+        .email-card-header.safe { background: hsl(var(--status-safe) / 0.2); }
+        .email-card-header.safe span { color: hsl(var(--status-safe)); }
+        .email-card-header.safe svg { color: hsl(var(--status-safe)); }
+        .email-card-header.warn {
+            background: hsl(var(--security-warning) / 0.25);
+            border-bottom-color: hsl(var(--security-warning) / 0.3);
+            padding: 10px 16px;
+        }
+        .email-card-header.warn span {
+            color: hsl(var(--security-warning));
+            font-weight: 600;
+        }
+        .email-card-header.warn svg { color: hsl(var(--security-warning)); }
+        .email-card-body { padding: 16px 20px; }
+        .email-person {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 12px;
+        }
+        .avatar {
+            width: 40px; height: 40px;
+            border-radius: 50%;
+            display: flex; align-items: center; justify-content: center;
+            font-weight: 600; font-size: 14px;
+        }
+        .avatar.safe { background: hsl(var(--primary) / 0.2); color: hsl(var(--primary)); }
+        .avatar.warn { background: hsl(var(--security-warning) / 0.2); color: hsl(var(--security-warning)); }
+        .email-person .name { font-weight: 500; font-size: 14px; }
+        .email-person .addr { font-size: 13px; }
+        .email-person .addr.safe { color: hsl(var(--status-safe)); }
+        .email-person .addr.danger {
+            color: hsl(var(--security-danger));
+            text-decoration: line-through;
+        }
+        .email-subject { font-size: 14px; color: hsl(var(--dark-muted)); }
+        .email-preview { font-size: 12px; color: hsl(var(--dark-muted) / 0.6); margin-top: 8px; }
+        .verify-banner {
+            margin-top: 12px;
+            background: hsl(var(--security-warning) / 0.15);
+            border: 1px solid hsl(var(--security-warning) / 0.3);
+            border-radius: 8px;
+            padding: 12px;
+            font-size: 14px;
+            font-weight: 600;
+            color: hsl(var(--security-warning));
+        }
+        .highlight { background: hsl(var(--security-danger) / 0.4); padding: 0 2px; border-radius: 2px; font-weight: 700; }
+
+        /* Threat cards */
+        .threat-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+            gap: 16px;
+            margin-bottom: 40px;
+        }
+        .threat-card {
+            background: hsl(var(--card) / 0.1);
+            backdrop-filter: blur(4px);
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 12px;
+            padding: 20px;
+            transition: border-color 0.2s;
+        }
+        .threat-card:hover { border-color: hsl(var(--security-warning) / 0.3); }
+        .threat-card-header {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 12px;
+        }
+        .threat-icon {
+            width: 40px; height: 40px;
+            border-radius: 8px;
+            background: hsl(var(--security-warning) / 0.2);
+            display: flex; align-items: center; justify-content: center;
+        }
+        .threat-icon svg { width: 20px; height: 20px; color: hsl(var(--security-warning)); }
+        .threat-card h3 { font-weight: 600; }
+        .threat-card > p { font-size: 14px; color: hsl(var(--dark-muted)); }
+        .threat-examples {
+            margin-top: 16px;
+            padding-top: 16px;
+            border-top: 1px solid rgba(255,255,255,0.1);
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        .threat-example {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 12px;
+            font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+        }
+        .threat-example svg { width: 16px; height: 16px; flex-shrink: 0; }
+        .threat-example.bad svg { color: hsl(var(--security-danger)); }
+        .threat-example.bad span { color: hsl(var(--security-danger)); }
+        .threat-example.good svg { color: hsl(var(--status-safe)); }
+        .threat-example.good span { color: hsl(var(--status-safe)); }
+
+        /* ── Trust Section ── */
+        .trust-section {
+            padding: 80px 0;
+            background: hsl(var(--trust-bg));
+            border-top: 1px solid hsl(var(--trust-border));
+            border-bottom: 1px solid hsl(var(--trust-border));
+        }
+        .trust-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 24px;
+        }
+        .trust-card {
+            background: hsl(var(--card));
+            border: 1px solid hsl(var(--border));
+            border-radius: 12px;
+            padding: 20px;
+            transition: box-shadow 0.2s;
+        }
+        .trust-card:hover { box-shadow: 0 4px 12px rgba(0,0,0,0.08); }
+        .trust-card-inner {
+            display: flex;
+            align-items: flex-start;
+            gap: 16px;
+        }
+        .trust-icon {
+            width: 40px; height: 40px;
+            border-radius: 8px;
+            background: hsl(var(--primary) / 0.1);
+            display: flex; align-items: center; justify-content: center;
+            flex-shrink: 0;
+        }
+        .trust-icon svg { width: 20px; height: 20px; color: hsl(var(--primary)); }
+        .trust-card h3 { font-weight: 600; margin-bottom: 4px; }
+        .trust-card p { font-size: 14px; color: hsl(var(--muted-foreground)); }
+        .compliance-row {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 16px;
+            margin-top: 48px;
+        }
+        .compliance-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            background: hsl(var(--card));
+            border: 1px solid hsl(var(--border));
+            border-radius: 9999px;
+            padding: 8px 16px;
+            font-size: 14px;
+            color: hsl(var(--muted-foreground));
+        }
+        .compliance-badge svg { width: 16px; height: 16px; color: hsl(var(--primary)); }
+
+        /* ── Pricing ── */
+        .pricing-section {
+            padding: 64px 0 80px;
+        }
+        .pricing-intro {
+            text-align: center;
+            margin-bottom: 12px;
+            font-size: 14px;
+            color: hsl(var(--muted-foreground));
+        }
+        .pricing-card {
+            max-width: 420px;
+            margin: 0 auto;
+            background: hsl(var(--card));
+            border: 1px solid hsl(var(--border));
+            border-radius: 12px;
+            padding: 32px;
+            text-align: center;
+        }
+        .price {
+            font-size: clamp(2.25rem, 4vw, 3rem);
+            font-weight: 700;
+            margin-bottom: 4px;
+        }
+        .price span { font-size: 1rem; font-weight: 400; color: hsl(var(--muted-foreground)); }
+        .pricing-desc {
+            color: hsl(var(--muted-foreground));
+            margin-bottom: 24px;
+        }
+        .pricing-list {
+            text-align: left;
+            margin-bottom: 32px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+        .pricing-list li {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            font-size: 14px;
+        }
+        .pricing-list li svg {
+            width: 20px; height: 20px;
+            color: hsl(var(--status-safe));
+            flex-shrink: 0;
+        }
+        .pricing-email {
+            font-size: 12px;
+            color: hsl(var(--muted-foreground));
+            margin-top: 16px;
+        }
+        .pricing-email a {
+            text-decoration: underline;
+            transition: color 0.2s;
+        }
+        .pricing-email a:hover { color: hsl(var(--foreground)); }
+
+        /* ── CTA Bottom ── */
+        .cta-bottom {
+            padding: 80px 0;
+            text-align: center;
+        }
+        .cta-bottom h2 {
+            font-size: clamp(1.5rem, 3vw, 2.25rem);
+            font-weight: 600;
+            margin-bottom: 16px;
+        }
+        .cta-bottom .sub {
+            font-size: 1.125rem;
+            color: hsl(var(--muted-foreground));
+            margin-bottom: 32px;
+        }
+        .cta-fine {
+            font-size: 12px;
+            color: hsl(var(--muted-foreground));
+            margin-top: 16px;
+            margin-bottom: 24px;
+        }
+        .cta-security {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 14px;
+            color: hsl(var(--muted-foreground));
+        }
+        .cta-security svg { width: 16px; height: 16px; color: hsl(var(--primary)); }
+
+        /* ── Footer ── */
+        footer {
+            padding: 32px 0;
+            border-top: 1px solid hsl(var(--border));
+        }
+        .footer-inner {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 16px;
+        }
+        @media (min-width: 768px) {
+            .footer-inner { flex-direction: row; justify-content: space-between; }
+        }
+        .footer-left {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .footer-left span {
+            font-size: 14px;
+            color: hsl(var(--muted-foreground));
+        }
+        .footer-right {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 14px;
+            color: hsl(var(--muted-foreground));
+        }
+        .footer-right svg { width: 16px; height: 16px; color: hsl(var(--primary)); }
+
+        /* ── Animations ── */
+        .fade-in {
+            opacity: 0;
+            transform: translateY(20px);
+            transition: opacity 0.6s ease-out, transform 0.6s ease-out;
+        }
+        .fade-in.visible {
+            opacity: 1;
+            transform: translateY(0);
+        }
+        .fade-scale {
+            opacity: 0;
+            transform: scale(0.9);
+            transition: opacity 0.6s ease-out, transform 0.6s ease-out;
+        }
+        .fade-scale.visible {
+            opacity: 1;
+            transform: scale(1);
+        }
+
+        /* Utility */
+        .icon-inline { display: inline-block; vertical-align: middle; }
     </style>
 </head>
 <body>
-    <div class="header">
-        <h1>ClientReady Dashboard</h1>
-        <div class="user-info">
-            <span class="user-email">{{ user_email }}</span>
-            <button onclick="syncEmails()" class="sync-btn" id="syncBtn">
-                🔄 Sync Emails
-            </button>
-            <form method="POST" action="/logout" style="margin: 0;">
-                <button type="submit" class="logout-btn">Logout</button>
-            </form>
+
+<!-- ── Header ── -->
+<header>
+    <div class="container-narrow">
+        <div class="inner">
+            <div class="logo-group">
+                <div class="logo-icon">CR</div>
+                <span class="logo-text">ClientReady</span>
+            </div>
+            <a href="/connect" class="btn btn-sm btn-primary">Connect Gmail</a>
         </div>
     </div>
-    
-    <div id="notification" class="notification"></div>
-    
-    <div class="dashboard-container">
-        <iframe src="{{ retool_url }}" allow="clipboard-read; clipboard-write" id="dashboardFrame"></iframe>
+</header>
+
+<!-- ── Hero ── -->
+<section class="hero">
+    <div class="container-narrow">
+        <h1 class="fade-in">Know which clients need your attention—<br><span class="accent">without opening email</span></h1>
+        <p class="subtitle fade-in">ClientReady reads your Gmail and sorts clients into Ready / Waiting / Needs Attention. Built for CPAs during tax season.</p>
+        <p class="sub2 fade-in">Start with tax season. Use it all year for any client workflow.</p>
+
+        <div class="badge-row fade-in">
+            <div class="badge">
+                <svg class="safe" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.801 10A10 10 0 1 1 17 3.335"/><path d="m9 11 3 3L22 4"/></svg>
+                Built for tax season
+            </div>
+            <div class="badge">
+                <svg class="pri" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/></svg>
+                Bank-level security
+            </div>
+        </div>
+
+        <div class="hero-actions fade-in">
+            <a href="/connect" class="btn btn-lg btn-primary">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="18" height="11" x="3" y="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                Connect Gmail
+            </a>
+            <a href="#demo" class="link-arrow">See How It Works <span>→</span></a>
+        </div>
+
+        <!-- Inbox Preview -->
+        <div class="inbox-preview fade-in">
+            <div class="inbox-bar">
+                <div class="inbox-dots">
+                    <span class="dot-red"></span>
+                    <span class="dot-yellow"></span>
+                    <span class="dot-green"></span>
+                </div>
+                <span class="label">Inbox — ClientReady View</span>
+            </div>
+            <div class="inbox-row">
+                <div class="inbox-dot" style="background: hsl(var(--status-safe));"></div>
+                <div class="inbox-content">
+                    <div class="inbox-sender">Marcus Rodriguez</div>
+                    <div class="inbox-subject">2024 Tax Documents Attached</div>
+                    <div class="inbox-snippet">Hi, I've attached my W-2 and bank statements...</div>
+                </div>
+            </div>
+            <div class="inbox-row">
+                <div class="inbox-dot" style="background: hsl(var(--status-waiting));"></div>
+                <div class="inbox-content">
+                    <div class="inbox-sender">Pinnacle Ventures LLC</div>
+                    <div class="inbox-subject">Re: Missing K-1 for 2024</div>
+                    <div class="inbox-snippet">We're still waiting on the partnership K-1...</div>
+                </div>
+            </div>
+            <div class="inbox-row">
+                <div class="inbox-dot" style="background: hsl(var(--muted-foreground) / 0.4);"></div>
+                <div class="inbox-content">
+                    <div class="inbox-sender">Sandra Chen</div>
+                    <div class="inbox-subject">Re: Tax prep confirmation</div>
+                    <div class="inbox-snippet">Thanks for confirming! I'll send the remaining...</div>
+                </div>
+            </div>
+            <div class="inbox-row suspicious-row">
+                <div class="inbox-dot" style="background: hsl(var(--security-danger));"></div>
+                <div class="inbox-content">
+                    <div class="inbox-sender">
+                        <span class="text-danger">Marcus Rodrlguez</span>
+                        <span class="suspicious-badge">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>
+                            Suspicious sender
+                        </span>
+                    </div>
+                    <div class="inbox-subject">URGENT: Update payment details</div>
+                    <div class="inbox-snippet">Please wire the refund to this new account...</div>
+                </div>
+            </div>
+        </div>
     </div>
+</section>
 
-    <script>
-        function showNotification(message, type) {
-            const notification = document.getElementById('notification');
-            notification.textContent = message;
-            notification.className = 'notification ' + type;
-            notification.style.display = 'block';
-            
-            setTimeout(() => {
-                notification.style.display = 'none';
-            }, 4000);
-        }
+<!-- ── How It Works ── -->
+<section id="demo" class="how-it-works">
+    <div class="container-narrow">
+        <div class="section-header">
+            <h2 class="fade-in">How it works</h2>
+            <p class="fade-in">From inbox chaos to client clarity in under 2 minutes.</p>
+        </div>
+        <div class="steps-grid">
+            <div class="step-card fade-in">
+                <div class="step-num">1</div>
+                <div class="step-icon">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="20" height="16" x="2" y="4" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg>
+                </div>
+                <h3>Connect Gmail</h3>
+                <p>Grant read-only access. We never send, edit, or delete emails.</p>
+            </div>
+            <div class="step-card fade-in">
+                <div class="step-num">2</div>
+                <div class="step-icon">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z"/><path d="M20 3v4"/><path d="M22 5h-4"/><path d="M4 17v2"/><path d="M5 18H3"/></svg>
+                </div>
+                <h3>Analyzes email threads</h3>
+                <p>ClientReady analyzes email conversations to extract client status, missing documents, and deadlines—all in read-only mode.</p>
+            </div>
+            <div class="step-card fade-in">
+                <div class="step-num">3</div>
+                <div class="step-icon">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.801 10A10 10 0 1 1 17 3.335"/><path d="m9 11 3 3L22 4"/></svg>
+                </div>
+                <h3>See who's ready</h3>
+                <p>Your clients sorted into Ready / Waiting / Needs Attention — with evidence from actual emails.</p>
+            </div>
+        </div>
+    </div>
+</section>
 
-        async function syncEmails() {
-            const btn = document.getElementById('syncBtn');
-            const originalText = btn.textContent;
-            
-            btn.disabled = true;
-            btn.textContent = '⏳ Syncing...';
-            
-            try {
-                const response = await fetch('/api/trigger-sync', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    }
-                });
-                
-                const data = await response.json();
-                
-                if (data.success) {
-                    showNotification('✓ Emails syncing! Dashboard will refresh in a moment...', 'success');
-                    
-                    setTimeout(() => {
-                        document.getElementById('dashboardFrame').src = document.getElementById('dashboardFrame').src;
-                    }, 3000);
-                } else {
-                    showNotification('⚠️ Sync failed: ' + data.message, 'error');
-                }
-            } catch (error) {
-                showNotification('❌ Error: ' + error.message, 'error');
-            } finally {
-                btn.disabled = false;
-                btn.textContent = originalText;
-            }
+<!-- ── Security (dark) ── -->
+<section class="security-section">
+    <div class="container-narrow">
+        <div class="section-header" style="max-width: 700px; margin-left: auto; margin-right: auto;">
+            <h2 class="fade-in">Built for an industry under attack</h2>
+            <div class="fade-scale" style="margin: 24px 0;">
+                <div class="stat-badge">
+                    <div class="number">4000%</div>
+                    <div class="label">increase in cyberattacks targeting tax professionals in 2024</div>
+                </div>
+            </div>
+            <p class="fade-in">Your inbox isn't just chaotic—it's your biggest vulnerability. ClientReady watches for threats.</p>
+        </div>
+
+        <div class="email-compare fade-in">
+            <div class="email-card">
+                <div class="email-card-header safe">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.801 10A10 10 0 1 1 17 3.335"/><path d="m9 11 3 3L22 4"/></svg>
+                    <span>Verified Sender</span>
+                </div>
+                <div class="email-card-body">
+                    <div class="email-person">
+                        <div class="avatar safe">SM</div>
+                        <div>
+                            <div class="name">Sarah Mitchell</div>
+                            <div class="addr safe">sarah.mitchell@gmail.com</div>
+                        </div>
+                    </div>
+                    <div class="email-subject">Re: 2024 Tax Documents</div>
+                    <div class="email-preview">Hi, attached are my W-2 forms as discussed...</div>
+                </div>
+            </div>
+            <div class="email-card danger">
+                <div class="email-card-header warn">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>
+                    <span>⚠️ Warning: Domain mismatch</span>
+                </div>
+                <div class="email-card-body">
+                    <div class="email-person">
+                        <div class="avatar warn">SM</div>
+                        <div>
+                            <div class="name">Sarah Mitchell</div>
+                            <div class="addr danger">sarah.mitche<span class="highlight">l1</span>@outlook.com</div>
+                        </div>
+                    </div>
+                    <div class="email-subject">URGENT: Update Wire Instructions</div>
+                    <div class="email-preview">Please update the account for my tax refund...</div>
+                    <div class="verify-banner">🚨 Verify sender before responding</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="threat-grid">
+            <div class="threat-card fade-in">
+                <div class="threat-card-header">
+                    <div class="threat-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>
+                    </div>
+                    <h3>Spoofed domains</h3>
+                </div>
+                <p>"irs.com" pretending to be "irs.gov"</p>
+                <div class="threat-examples">
+                    <div class="threat-example bad">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="m15 9-6 6"/><path d="m9 9 6 6"/></svg>
+                        <span>support@irs.com</span>
+                    </div>
+                    <div class="threat-example good">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.801 10A10 10 0 1 1 17 3.335"/><path d="m9 11 3 3L22 4"/></svg>
+                        <span>support@irs.gov</span>
+                    </div>
+                </div>
+            </div>
+            <div class="threat-card fade-in">
+                <div class="threat-card-header">
+                    <div class="threat-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="17" x2="22" y1="8" y2="13"/><line x1="22" x2="17" y1="8" y2="13"/></svg>
+                    </div>
+                    <h3>Fake client emails</h3>
+                </div>
+                <p>Payment instructions from look-alike addresses</p>
+                <div class="threat-examples">
+                    <div class="threat-example bad">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="m15 9-6 6"/><path d="m9 9 6 6"/></svg>
+                        <span>john.smith@gmai1.com</span>
+                    </div>
+                    <div class="threat-example good">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.801 10A10 10 0 1 1 17 3.335"/><path d="m9 11 3 3L22 4"/></svg>
+                        <span>john.smith@gmail.com</span>
+                    </div>
+                </div>
+            </div>
+            <div class="threat-card fade-in">
+                <div class="threat-card-header">
+                    <div class="threat-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="20" height="16" x="2" y="4" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg>
+                    </div>
+                    <h3>Suspicious patterns</h3>
+                </div>
+                <p>New sender claiming to be existing client</p>
+                <div class="threat-examples">
+                    <div class="threat-example bad">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="m15 9-6 6"/><path d="m9 9 6 6"/></svg>
+                        <span>New device, urgent request</span>
+                    </div>
+                    <div class="threat-example good">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.801 10A10 10 0 1 1 17 3.335"/><path d="m9 11 3 3L22 4"/></svg>
+                        <span>Consistent communication pattern</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- ── Trust ── -->
+<section class="trust-section">
+    <div class="container-narrow">
+        <div class="section-header">
+            <h2 class="fade-in">You stay in control</h2>
+        </div>
+        <div class="trust-grid">
+            <div class="trust-card fade-in">
+                <div class="trust-card-inner">
+                    <div class="trust-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"/><circle cx="12" cy="12" r="3"/></svg>
+                    </div>
+                    <div>
+                        <h3>Read-only access</h3>
+                        <p>ClientReady never sends or deletes emails</p>
+                    </div>
+                </div>
+            </div>
+            <div class="trust-card fade-in">
+                <div class="trust-card-inner">
+                    <div class="trust-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="18" height="11" x="3" y="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                    </div>
+                    <div>
+                        <h3>End-to-end encryption</h3>
+                        <p>Bank-level security standards</p>
+                    </div>
+                </div>
+            </div>
+            <div class="trust-card fade-in">
+                <div class="trust-card-inner">
+                    <div class="trust-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"/><path d="m15 5 4 4"/></svg>
+                    </div>
+                    <div>
+                        <h3>Override any status</h3>
+                        <p>You're in charge, always</p>
+                    </div>
+                </div>
+            </div>
+            <div class="trust-card fade-in">
+                <div class="trust-card-inner">
+                    <div class="trust-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/></svg>
+                    </div>
+                    <div>
+                        <h3>Phishing detection</h3>
+                        <p>Automatic flags for suspicious senders</p>
+                    </div>
+                </div>
+            </div>
+            <div class="trust-card fade-in">
+                <div class="trust-card-inner">
+                    <div class="trust-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/></svg>
+                    </div>
+                    <div>
+                        <h3>Audit logs</h3>
+                        <p>See exactly what was accessed and when</p>
+                    </div>
+                </div>
+            </div>
+            <div class="trust-card fade-in">
+                <div class="trust-card-inner">
+                    <div class="trust-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="17" x2="22" y1="8" y2="13"/><line x1="22" x2="17" y1="8" y2="13"/></svg>
+                    </div>
+                    <div>
+                        <h3>Your data stays yours</h3>
+                        <p>Never sold, never used for training</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="compliance-row fade-in">
+            <div class="compliance-badge">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="18" height="11" x="3" y="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                GDPR Compliant
+            </div>
+            <div class="compliance-badge">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="18" height="11" x="3" y="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                256-bit Encryption
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- ── Pricing ── -->
+<section class="pricing-section">
+    <div class="container-narrow">
+        <p class="pricing-intro fade-in">Join our first 50 beta users—early members get direct input on features and priority support.</p>
+        <div class="section-header">
+            <h2 class="fade-in">Simple pricing</h2>
+            <p class="fade-in" style="max-width: 500px; margin: 0 auto;">We're onboarding our first group of CPAs for tax season. Early users get direct access to our team and help shape the product.</p>
+        </div>
+        <div class="pricing-card fade-in">
+            <div class="price">$49<span>/month</span></div>
+            <p class="pricing-desc">Unlimited clients. Full security features.</p>
+            <ul class="pricing-list">
+                <li>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6 9 17l-5-5"/></svg>
+                    14-day free trial
+                </li>
+                <li>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6 9 17l-5-5"/></svg>
+                    No credit card required
+                </li>
+                <li>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6 9 17l-5-5"/></svg>
+                    Cancel anytime
+                </li>
+                <li>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6 9 17l-5-5"/></svg>
+                    Unlimited clients included
+                </li>
+            </ul>
+            <a href="/connect" class="btn btn-lg btn-primary" style="width: 100%;">Start Free Trial</a>
+            <p class="pricing-email">Questions? Email <a href="mailto:gilad@clientready.com">gilad@clientready.com</a></p>
+        </div>
+    </div>
+</section>
+
+<!-- ── CTA Bottom ── -->
+<section class="cta-bottom">
+    <div class="container-narrow">
+        <div style="max-width: 640px; margin: 0 auto;">
+            <h2 class="fade-in">Stop drowning in client email</h2>
+            <p class="sub fade-in">14-day free trial. Read-only access. No credit card required.</p>
+            <a href="/connect" class="btn btn-lg btn-primary fade-in">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="18" height="11" x="3" y="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                Start Your 14-Day Free Trial
+            </a>
+            <p class="cta-fine fade-in">Read-only access · No credit card required · Cancel anytime</p>
+            <div class="cta-security fade-in">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/></svg>
+                <span>Your data is encrypted and never shared</span>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- ── Footer ── -->
+<footer>
+    <div class="container-narrow">
+        <div class="footer-inner">
+            <div class="footer-left">
+                <div class="logo-icon" style="width: 32px; height: 32px; font-size: 12px;">CR</div>
+                <span>ClientReady — Built for CPAs who don't trust task lists.</span>
+            </div>
+            <div class="footer-right">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/></svg>
+                <span>GDPR Compliant · 256-bit Encryption</span>
+            </div>
+        </div>
+    </div>
+</footer>
+
+<script>
+// Intersection Observer for scroll animations
+const observer = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+        if (entry.isIntersecting) {
+            entry.target.classList.add('visible');
         }
-    </script>
+    });
+}, { threshold: 0.1, rootMargin: '0px 0px -40px 0px' });
+
+document.querySelectorAll('.fade-in, .fade-scale').forEach(el => observer.observe(el));
+</script>
 </body>
-</html>'''
-
-# ============================================
-# HELPER FUNCTIONS
-# ============================================
-
-def nylas_headers():
-    return {
-        "Authorization": f"Bearer {NYLAS_API_KEY}",
-        "Content-Type": "application/json",
-    }
-
-# ============================================
-# ROUTES
-# ============================================
-
-@app.route('/')
-def index():
-    if 'user_email' in session:
-        return redirect('/dashboard')
-    
-    # Serve the new landing page from templates/landing.html
-    return render_template('landing.html')
-
-@app.route('/connect')
-def connect():
-    state = secrets.token_urlsafe(24)
-    session["oauth_state"] = state
-    
-    redirect_uri = f"{PUBLIC_BASE_URL}/oauth/callback"
-    params = {
-        "client_id": NYLAS_CLIENT_ID,
-        "redirect_uri": redirect_uri,
-        "response_type": "code",
-        "provider": "google",
-        "state": state,
-        "access_type": "offline",
-    }
-    
-    auth_url = f"{NYLAS_API_URI}/v3/connect/auth?{urlencode(params)}"
-    return redirect(auth_url, code=302)
-
-@app.route('/oauth/callback')
-def oauth_callback():
-    code = request.args.get("code")
-    state = request.args.get("state")
-    
-    if not code:
-        return redirect('/?error=missing_code')
-    
-    if state != session.get("oauth_state"):
-        return redirect('/?error=invalid_state')
-    
-    try:
-        token_url = f"{NYLAS_API_URI}/v3/connect/token"
-        payload = {
-            "grant_type": "authorization_code",
-            "code": code,
-            "client_id": NYLAS_CLIENT_ID,
-            "client_secret": NYLAS_API_KEY,
-            "redirect_uri": f"{PUBLIC_BASE_URL}/oauth/callback",
-        }
-        
-        response = requests.post(
-            token_url, 
-            json=payload, 
-            headers=nylas_headers(), 
-            timeout=30
-        )
-        response.raise_for_status()
-        data = response.json()
-        
-        grant_id = data.get("grant_id")
-        email = data.get("email")
-        provider = data.get("provider", "google")
-        
-        if not grant_id:
-            return redirect('/?error=no_grant_id')
-        
-        # Store in session
-        session["user_email"] = email
-        session["grant_id"] = grant_id
-        session["provider"] = provider
-        
-        # ALWAYS trigger n8n webhook (it handles upsert logic)
-        if N8N_WEBHOOK_URL:
-            try:
-                n8n_payload = {
-                    "grant_id": grant_id,
-                    "email": email,
-                    "provider": provider,
-                    "action": "sync",
-                }
-                
-                webhook_response = requests.post(
-                    N8N_WEBHOOK_URL, 
-                    json=n8n_payload, 
-                    timeout=30
-                )
-                
-                if webhook_response.status_code != 200:
-                    print(f"⚠️ n8n webhook returned {webhook_response.status_code}")
-                else:
-                    print(f"✓ Triggered sync for {email}")
-                    
-            except Exception as e:
-                print(f"❌ n8n webhook failed: {e}")
-        
-        session.pop("oauth_state", None)
-        
-        return redirect('/dashboard')
-    
-    except Exception as e:
-        return redirect(f'/?error={str(e)}')
-
-
-@app.route('/api/trigger-sync', methods=['POST'])
-def trigger_sync():
-    """Proxy endpoint to trigger n8n sync"""
-    if 'user_email' not in session:
-        return jsonify({'error': 'Not authenticated'}), 401
-    
-    email = session.get('user_email')
-    grant_id = session.get('grant_id')
-    
-    if not N8N_WEBHOOK_URL:
-        return jsonify({'error': 'Sync not configured'}), 500
-    
-    try:
-        payload = {
-            "grant_id": grant_id,
-            "email": email,
-            "provider": "google",
-            "action": "manual_sync"
-        }
-        
-        response = requests.post(
-            N8N_WEBHOOK_URL,
-            json=payload,
-            timeout=30
-        )
-        
-        if response.status_code == 200:
-            return jsonify({
-                'success': True,
-                'message': 'Sync triggered successfully'
-            }), 200
-        else:
-            return jsonify({
-                'success': False,
-                'message': 'Sync failed'
-            }), 500
-            
-    except Exception as e:
-        return jsonify({
-            'success': False,
-            'message': str(e)
-        }), 500
-
-
-@app.route('/dashboard')
-def dashboard():
-    if 'user_email' not in session:
-        return redirect('/')
-    
-    email = session.get('user_email')
-    retool_url = f"{RETOOL_EMBED_URL}?email={email}"
-    
-    return render_template_string(
-        DASHBOARD_TEMPLATE,
-        user_email=email,
-        retool_url=retool_url
-    )
-
-@app.route('/logout', methods=['POST', 'GET'])
-def logout():
-    session.clear()
-    return redirect('/')
-
-@app.route('/health')
-def health():
-    return jsonify({
-        'status': 'ok', 
-        'service': 'clientready-app'
-    }), 200
-
-if __name__ == '__main__':
-    port = int(os.environ.get('PORT', 5000))
-    app.run(debug=False, host='0.0.0.0', port=port)
+</html>
